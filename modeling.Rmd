@@ -5,15 +5,19 @@ date: "12/31/2024"
 output: html_document
 ---
 
-### Read the Data
-```{r}
-petrel_sexing <- read.csv("C:/Users/pauly/Desktop/summer_2024/greatduck_2024/autumn_2024/petrel_2024/r/petrel_morphometrics/petrelsex_john.csv")
-```
+Introduction
 
-```{r}
+# Downloading Libraries
+```{r install-tidyverse}
+install.packages("tidyverse")
 library(tidyverse)
 ```
 
+
+# Reading the Data
+```{r}
+petrel_sexing <- read.csv("C:/Users/pauly/Desktop/summer_2024/greatduck_2024/autumn_2024/petrel_2024/r/petrel_morphometrics/petrelsex_john.csv")
+```
 
 
 ### Identifying Means of the Sexes
@@ -39,7 +43,7 @@ print(means)
 # Univariate ANOVA to Compare Measurements Between the Sexes
 We will perform ANOVA for each biometric measurement to compare means between males and females.
 
-```{r}
+```{r anova}
 # Perform ANOVA for each measurement
 anova_results <- list()
 
@@ -57,7 +61,7 @@ anova_results
 # Sexual Size Dimorphism (SSD) Index
 The SSD index quantifies the size difference between males and females for each measurement as a percentage. The purpose of this is to measure and compare the extent of sexual dimorphism across traits in a standardized way. If males are larger on average, the SSD index will be positive. If females are larger, the SSD index will be negative.
 
-```{r}
+```{r ssd}
 # List of morphometric measurements
 measurements <- c("weight", "chord", "tl", "hl", "tu", "cl", "bdt", "bdg")
 
@@ -91,14 +95,14 @@ A GLM is a flexible model for predicting a response variable (in this case, sex,
 The purpose of this model is to create a formula that predicts the sex of an individual based on its morphometric traits. The output is a probability that an individual belongs to one group (e.g., male), which can then be converted to a prediction (male or female). Predictor variables (traits) are tested for their significance in explaining sex differences.
 
 ### Prepare the Data
-```{r}
+```{r sex_to_binary}
 # Convert 'sex' to a binary factor if it's not already
 petrel_sexing$sex <- as.factor(petrel_sexing$sex)
 levels(petrel_sexing$sex) <- c("0", "1")  # 0 = female, 1 = male
 ```
 
 ### Fit the GLM with Logistic Regression
-```{r}
+```{r initial_glm}
 # Fit the logistic regression model
 glm_model <- glm(sex ~ weight + chord + tl + hl + tu + cl + bdt + bdg,
                  data = petrel_sexing,
@@ -116,7 +120,7 @@ VIF helps identify which variables in a regression model are highly correlated w
 A VIF score above 5 is considered problematic, indicating a high level of multicollinearity. Scores closer to 1 suggest minimal collinearity. 
 
 
-```{r}
+```{r vif_assessment}
 # Install and load the 'car' package if necessary
 if (!require(car)) install.packages("car")
 library(car)
@@ -128,7 +132,7 @@ vif(glm_model)
 ### Model Selection using AIC
 To identify the best combination of predictors, use the step() function to perform stepwise model selection based on the Akaike Information Criterion (AIC).
 
-```{r}
+```{r model_selection_stepwise}
 # Perform stepwise dplyr::selection
 glm_step <- step(glm_model, direction = "both")
 
@@ -139,7 +143,7 @@ summary(glm_step)
 ### Assess Original Model Accuracy
 You can evaluate the model’s ability to correctly predict sex using cross-validation or by calculating metrics like accuracy, sensitivity, and specificity.
 
-```{r}
+```{r original_model_accuracy}
 # Predict probabilities
 predicted_prob <- predict(glm_model, type = "response")
 
@@ -157,7 +161,7 @@ print(paste("Accuracy:", round(accuracy * 100, 2), "%"))
 ### Assess Stepwise Model Accuracy
 You can evaluate the model’s ability to correctly predict sex using cross-validation or by calculating metrics like accuracy, sensitivity, and specificity.
 
-```{r}
+```{r stepwise_accuracy}
 # Predict probabilities
 predicted_prob <- predict(glm_step, type = "response")
 
@@ -170,21 +174,4 @@ confusion_matrix <- table(Predicted = predicted_sex, Actual = petrel_sexing$sex)
 # Calculate accuracy
 accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
 print(paste("Accuracy:", round(accuracy * 100, 2), "%"))
-```
-
-# Univariate Analysis of Deviation for GLMs
-
-This tests whether each morphometric variable significantly improves the model's ability to predict sex. The purpose of this is to dplyr::select the most relevant variables for inclusion in the final model.
-
-This compares two models: one with the variable and one without it. The deviance (a measure of model fit) is used to assess the importance of the variable. A significant reduction in deviance means the variable is important.
-
-```{r}
-# Univariate analysis for each variable in the logistic model
-univariate_results <- lapply(names(petrel_sexing)[2:9], function(measurement) {
-  formula <- as.formula(paste("sex ~", measurement))
-  glm_model_univariate <- glm(formula, family = binomial(link = "logit"), data = petrel_sexing)
-  summary(glm_model_univariate)
-})
-# View the univariate results
-univariate_results
 ```
