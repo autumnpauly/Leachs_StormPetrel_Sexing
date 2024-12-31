@@ -1,0 +1,87 @@
+---
+title: "R-Shiny App for Sexing Leach's Storm-Petrels"
+author: "Autumn Pauly"
+date: "12/31/2024"
+output: html_document
+---
+
+
+# R-Shiny App
+
+```{r}
+# Load the Shiny library
+library(shiny)
+
+# Logistic regression coefficients from your model
+intercept <- 185.647  # Example value; replace with your actual intercept
+coef_chord <- -1.368  # Example value; replace with your chord length coefficient
+coef_head <- 0.465   # Example value; replace with your head length coefficient
+coef_culmen <- 0.957 # Example value; replace with your culmen length coefficient
+
+# Define the UI
+ui <- fluidPage(
+  titlePanel("Leach's Storm-Petrel Sex Prediction"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      numericInput("chord", "Chord Length (mm):", value = NA, step = 0.1),
+      numericInput("head", "Head Length (mm):", value = NA, step = 0.1),
+      numericInput("culmen", "Culmen Length (mm):", value = NA, step = 0.1),
+      actionButton("predict", "Predict Sex")
+    ),
+    
+    mainPanel(
+      h3("Prediction Results"),
+      textOutput("result"),
+      textOutput("probability")
+    )
+  )
+)
+
+# Define the server
+server <- function(input, output) {
+  
+  # Reactive expression to calculate probability
+  prediction <- reactive({
+    input$predict  # Trigger calculation when the button is clicked
+    
+    # Ensure inputs are not empty
+    if (is.na(input$chord) || is.na(input$head) || is.na(input$culmen)) {
+      return(list(probability = NA, classification = "Please provide all measurements."))
+    }
+    
+    # Logistic regression equation
+    logit <- intercept + coef_chord * input$chord +
+             coef_head * input$head +
+             coef_culmen * input$culmen
+    probability <- exp(logit) / (1 + exp(logit))  # Convert logit to probability
+    
+    # Classification based on probability
+    classification <- ifelse(probability > 0.5, "Male", "Female")
+    
+    return(list(probability = probability, classification = classification))
+  })
+  
+  # Render the results
+  output$result <- renderText({
+    result <- prediction()
+    if (!is.na(result$probability)) {
+      paste("Classification:", result$classification)
+    } else {
+      result$classification
+    }
+  })
+  
+  output$probability <- renderText({
+    result <- prediction()
+    if (!is.na(result$probability)) {
+      paste("Probability of being Male:", round(result$probability * 100, 2), "%")
+    }
+  })
+}
+
+# Run the application
+shinyApp(ui = ui, server = server)
+
+shiny::runApp("app.R")
+```
