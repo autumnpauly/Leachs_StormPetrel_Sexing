@@ -1,0 +1,190 @@
+---
+title: "GLM Model of Leach's Storm-Petrel Sexing"
+author: "Autumn Pauly"
+date: "12/31/2024"
+output: html_document
+---
+
+### Read the Data
+```{r}
+petrel_sexing <- read.csv("C:/Users/pauly/Desktop/summer_2024/greatduck_2024/autumn_2024/petrel_2024/r/petrel_morphometrics/petrelsex_john.csv")
+```
+
+```{r}
+library(tidyverse)
+```
+
+
+
+### Identifying Means of the Sexes
+This is where we are going to identify the means of the morphometric measurements of the  `female` and `male` individuals.
+
+```{r means, warning=FALSE, echo=FALSE, message=FALSE}
+# Calculate male and female means
+means <- petrel_sexing %>%
+  group_by(sex) %>%
+  summarise(across(c(weight, chord, tl, hl, tu, cl, bdg, bdt), mean, na.rm = TRUE))
+
+# Separate male and female means
+male_means <- means %>% filter(sex == "male") %>% dplyr::select(-sex)
+female_means <- means %>% filter(sex == "female") %>% dplyr::select(-sex)
+
+# #printing the male and female means
+# print(male_means)
+# 
+# print(female_means)
+print(means)
+```
+
+# Univariate ANOVA to Compare Measurements Between the Sexes
+We will perform ANOVA for each biometric measurement to compare means between males and females.
+
+```{r}
+# Perform ANOVA for each measurement
+anova_results <- list()
+
+measurements <- c("chord", "weight", "tl", "hl", "tu", "cl", "bdg", "bdt")
+
+for (measure in measurements) {
+  model <- aov(as.formula(paste(measure, "~ sex")), data = petrel_sexing)
+  anova_results[[measure]] <- summary(model)
+}
+
+# Print results
+anova_results
+```
+
+# Sexual Size Dimorphism (SSD) Index
+The SSD index quantifies the size difference between males and females for each measurement as a percentage. The purpose of this is to measure and compare the extent of sexual dimorphism across traits in a standardized way. If males are larger on average, the SSD index will be positive. If females are larger, the SSD index will be negative.
+
+```{r}
+# List of morphometric measurements
+measurements <- c("weight", "chord", "tl", "hl", "tu", "cl", "bdt", "bdg")
+
+# Calculate male and female means
+means <- petrel_sexing %>%
+  group_by(sex) %>%
+  summarise(across(all_of(measurements), mean, na.rm = TRUE))
+
+# Separate male and female means
+male_means <- petrel_sexing %>%
+  filter(sex == "male") %>%
+  summarise(across(all_of(measurements), mean, na.rm = TRUE))
+
+female_means <- petrel_sexing %>%
+  filter(sex == "female") %>%
+  summarise(across(all_of(measurements), mean, na.rm = TRUE))
+
+# Calculate SSD
+SSD <- (male_means / female_means - 1) * 100
+
+# Add measurement names to the SSD result
+SSD <- tibble::tibble(Measurement = measurements, SSD = as.numeric(SSD[1, ]))
+
+# Print the SSD results
+print(SSD)
+```
+
+# Generalized Linear Model (GLM) with Logistic Regression
+A GLM is a flexible model for predicting a response variable (in this case, sex, a binary outcome: male or female) as a function of predictor variables (morphometric measurements like weight, chord, etc.).
+
+The purpose of this model is to create a formula that predicts the sex of an individual based on its morphometric traits. The output is a probability that an individual belongs to one group (e.g., male), which can then be converted to a prediction (male or female). Predictor variables (traits) are tested for their significance in explaining sex differences.
+
+### Prepare the Data
+```{r}
+# Convert 'sex' to a binary factor if it's not already
+petrel_sexing$sex <- as.factor(petrel_sexing$sex)
+levels(petrel_sexing$sex) <- c("0", "1")  # 0 = female, 1 = male
+```
+
+### Fit the GLM with Logistic Regression
+```{r}
+# Fit the logistic regression model
+glm_model <- glm(sex ~ weight + chord + tl + hl + tu + cl + bdt + bdg,
+                 data = petrel_sexing,
+                 family = binomial(link = "logit"))
+
+# Summary of the model
+summary(glm_model)
+```
+
+### Evaluate Collinearity with Variance Inflation Factors (VIF)
+ The variance inflation factor (VIF) is a measure of the amount of multicolinearity in regression analysis, essentially showing how much the variance of a regression coefficient is inflated due to correlations between independent variables in the model; a high VIF score suggests that a variable is highly correlated with other variables, potentially causing issues with model interpretation and stability. 
+ 
+VIF helps identify which variables in a regression model are highly correlated with others, allowing you to address the issue by removing or transforming variables.
+ 
+A VIF score above 5 is considered problematic, indicating a high level of multicollinearity. Scores closer to 1 suggest minimal collinearity. 
+
+
+```{r}
+# Install and load the 'car' package if necessary
+if (!require(car)) install.packages("car")
+library(car)
+
+# Calculate VIFs
+vif(glm_model)
+```
+
+### Model Selection using AIC
+To identify the best combination of predictors, use the step() function to perform stepwise model selection based on the Akaike Information Criterion (AIC).
+
+```{r}
+# Perform stepwise dplyr::selection
+glm_step <- step(glm_model, direction = "both")
+
+# Summary of the final model
+summary(glm_step)
+```
+
+### Assess Original Model Accuracy
+You can evaluate the model’s ability to correctly predict sex using cross-validation or by calculating metrics like accuracy, sensitivity, and specificity.
+
+```{r}
+# Predict probabilities
+predicted_prob <- predict(glm_model, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1)
+predicted_sex <- ifelse(predicted_prob > 0.5, 1, 0)
+
+# Create a confusion matrix to compare predicted vs actual
+confusion_matrix <- table(Predicted = predicted_sex, Actual = petrel_sexing$sex)
+
+# Calculate accuracy
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print(paste("Accuracy:", round(accuracy * 100, 2), "%"))
+```
+
+### Assess Stepwise Model Accuracy
+You can evaluate the model’s ability to correctly predict sex using cross-validation or by calculating metrics like accuracy, sensitivity, and specificity.
+
+```{r}
+# Predict probabilities
+predicted_prob <- predict(glm_step, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1)
+predicted_sex <- ifelse(predicted_prob > 0.5, 1, 0)
+
+# Create a confusion matrix to compare predicted vs actual
+confusion_matrix <- table(Predicted = predicted_sex, Actual = petrel_sexing$sex)
+
+# Calculate accuracy
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+print(paste("Accuracy:", round(accuracy * 100, 2), "%"))
+```
+
+# Univariate Analysis of Deviation for GLMs
+
+This tests whether each morphometric variable significantly improves the model's ability to predict sex. The purpose of this is to dplyr::select the most relevant variables for inclusion in the final model.
+
+This compares two models: one with the variable and one without it. The deviance (a measure of model fit) is used to assess the importance of the variable. A significant reduction in deviance means the variable is important.
+
+```{r}
+# Univariate analysis for each variable in the logistic model
+univariate_results <- lapply(names(petrel_sexing)[2:9], function(measurement) {
+  formula <- as.formula(paste("sex ~", measurement))
+  glm_model_univariate <- glm(formula, family = binomial(link = "logit"), data = petrel_sexing)
+  summary(glm_model_univariate)
+})
+# View the univariate results
+univariate_results
+```
